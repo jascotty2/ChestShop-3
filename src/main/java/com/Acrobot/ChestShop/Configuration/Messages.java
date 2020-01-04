@@ -11,7 +11,7 @@ public class Messages {
     public static String iteminfo = "&aItem Information: &r";
 
     @PrecededBySpace
-    public static String ACCESS_DENIED = "You don't have permission to do that!";
+    public static String ACCESS_DENIED = "You don't have permission to access that shop's storage container!";
 
     @PrecededBySpace
     public static String NOT_ENOUGH_MONEY = "You don't have enough money!";
@@ -82,6 +82,10 @@ public class Messages {
     @PrecededBySpace
     public static String TOGGLE_MESSAGES_OFF = "You will no longer receive messages from your shop(s).";
     public static String TOGGLE_MESSAGES_ON = "You will now receive messages from your shop(s).";
+
+    @PrecededBySpace
+    public static String TOGGLE_ACCESS_ON = "You can no longer trade at shops that you have access to";
+    public static String TOGGLE_ACCESS_OFF = "You can now trade at shops that you have access to";
 
     public static String prefix(String message) {
         return Configuration.getColoured(prefix + message);

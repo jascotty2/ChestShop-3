@@ -1,5 +1,6 @@
 package com.Acrobot.ChestShop.Plugins;
 
+import com.Acrobot.ChestShop.ChestShop;
 import com.Acrobot.ChestShop.Configuration.Messages;
 import com.Acrobot.ChestShop.Configuration.Properties;
 import com.Acrobot.ChestShop.Events.Protection.ProtectBlockEvent;
@@ -58,12 +59,13 @@ public class LightweightChestProtection implements Listener {
         Container connectedContainer = event.getContainer();
 
         if (Properties.PROTECT_SIGN_WITH_LWC) {
-            if (!Security.protect(player, sign.getBlock())) {
+            if (!Security.protect(player, sign.getBlock(), event.getOwnerAccount() != null ? event.getOwnerAccount().getUuid() : player.getUniqueId())) {
                 player.sendMessage(Messages.prefix(Messages.NOT_ENOUGH_PROTECTIONS));
             }
         }
 
-        if (Properties.PROTECT_CHEST_WITH_LWC && connectedContainer != null && Security.protect(player, connectedContainer.getBlock())) {
+        if (Properties.PROTECT_CHEST_WITH_LWC && connectedContainer != null
+                && Security.protect(player, connectedContainer.getBlock(), event.getOwnerAccount() != null ? event.getOwnerAccount().getUuid() : player.getUniqueId())) {
             player.sendMessage(Messages.prefix(Messages.PROTECTED_SHOP));
         }
     }
@@ -120,10 +122,11 @@ public class LightweightChestProtection implements Listener {
         if (protectionEvent.isCancelled()) {
             return;
         }
+
         Protection protection = null;
         // funny bit: some versions of LWC being used on older servers don't support passing Material
         if(material_supported) {
-            protection = lwc.getPhysicalDatabase().registerProtection(block.getType(), Protection.Type.PRIVATE, worldName, player.getUniqueId().toString(), "", x, y, z);
+            protection = lwc.getPhysicalDatabase().registerProtection(block.getType(), Protection.Type.PRIVATE, worldName, event.getProtectionOwner().toString(), "", x, y, z);
         } else if(id_supported) {
             try {
                 // if we're on an older server that supports ids, use that.
@@ -131,6 +134,23 @@ public class LightweightChestProtection implements Listener {
             } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException ex) {
                 // something went wrong
                 id_supported = false;
+
+//        Protection protection = null;
+//        try {
+//            protection = lwc.getPhysicalDatabase().registerProtection(block.getType(), Protection.Type.PRIVATE, worldName, event.getProtectionOwner().toString(), "", x, y, z);
+//        } catch (LinkageError e) {
+//            try {
+//                int blockId = com.griefcraft.cache.BlockCache.getInstance().getBlockId(block);
+//                if (blockId < 0) {
+//                    return;
+//                }
+//                protection = lwc.getPhysicalDatabase().registerProtection(blockId, Protection.Type.PRIVATE, worldName, event.getProtectionOwner().toString(), "", x, y, z);
+//            } catch (LinkageError e2) {
+//                ChestShop.getBukkitLogger().warning(
+//                        "Incompatible LWC version installed! (" + lwc.getPlugin().getName() + " v" + lwc.getVersion()  + ") \n" +
+//                                "Material method error: " + e.getMessage() + "\n" +
+//                                "Block cache/type id error: " + e2.getMessage()
+//                );
             }
         }
 

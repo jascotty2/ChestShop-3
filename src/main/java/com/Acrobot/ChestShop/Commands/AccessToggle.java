@@ -2,7 +2,6 @@ package com.Acrobot.ChestShop.Commands;
 
 import com.Acrobot.ChestShop.Configuration.Messages;
 import org.apache.commons.lang.Validate;
-import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -14,50 +13,33 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * @author KingFaris10
+ * @author g--o
  */
-public class Toggle implements CommandExecutor {
+public class AccessToggle implements CommandExecutor {
     private static final Set<UUID> toggledPlayers = new HashSet<>();
 
-    @Override
-    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+    public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
         if (!(sender instanceof Player)) {
             return false;
         }
 
         Player player = (Player) sender;
 
-        if (args.length != 0) {
-            return false;
-        }
-
         if (setIgnoring(player, !isIgnoring(player))) {
-            player.sendMessage(Messages.prefix(Messages.TOGGLE_MESSAGES_OFF));
+            player.sendMessage(Messages.prefix(Messages.TOGGLE_ACCESS_OFF));
         } else {
-            player.sendMessage(Messages.prefix(Messages.TOGGLE_MESSAGES_ON));
+            player.sendMessage(Messages.prefix(Messages.TOGGLE_ACCESS_ON));
         }
 
         return true;
-    }
-
-    public static void clearToggledPlayers() {
-        toggledPlayers.clear();
     }
 
     public static boolean isIgnoring(OfflinePlayer player) {
         return player != null && isIgnoring(player.getUniqueId());
     }
 
-    public static boolean isIgnoring(UUID playerId) {
+    private static boolean isIgnoring(UUID playerId) {
         return toggledPlayers.contains(playerId);
-    }
-
-    /**
-     * @deprecated Use {@link #isIgnoring(UUID)}
-     */
-    @Deprecated
-    public static boolean isIgnoring(String playerName) {
-        return isIgnoring(Bukkit.getOfflinePlayer(playerName));
     }
 
     public static boolean setIgnoring(Player player, boolean ignoring) {
@@ -71,5 +53,4 @@ public class Toggle implements CommandExecutor {
 
         return ignoring;
     }
-
 }

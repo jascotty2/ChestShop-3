@@ -7,6 +7,7 @@ import com.Acrobot.ChestShop.Database.DaoCreator;
 import com.Acrobot.ChestShop.Database.Item;
 import com.j256.ormlite.dao.CloseableIterator;
 import com.j256.ormlite.dao.Dao;
+import com.j256.ormlite.stmt.SelectArg;
 import org.bukkit.Material;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.configuration.file.YamlConstructor;
@@ -139,20 +140,19 @@ public class ItemDatabase {
             clone.setAmount(1);
             clone.setDurability((short) 0);
 
-            String code = Base64.encodeObject(yaml.dump(clone));
-            Item itemEntity = itemDao.queryBuilder().where().eq("code", code).queryForFirst();
-
-            if (itemEntity != null) {
-                return Base62.encode(itemEntity.getId());
+            String dumped = yaml.dump(clone);
+            ItemStack loadedItem = yaml.loadAs(dumped, ItemStack.class);
+            if (!loadedItem.isSimilar(item)) {
+                dumped = yaml.dump(loadedItem);
             }
+            String code = Base64.encodeObject(dumped);
 
-            itemEntity = new Item(code);
-
-            itemDao.create(itemEntity);
-
-            int id = itemEntity.getId();
-
-            return Base62.encode(id);
+            Item itemEntity = itemDao.queryBuilder().where().eq("code", new SelectArg(code)).queryForFirst();
+            if (itemEntity == null) {
+                itemEntity = new Item(code);
+                itemDao.create(itemEntity);
+            }
+            return Base62.encode(itemEntity.getId());
         } catch (SQLException e) {
             e.printStackTrace();
         } catch (IOException e) {
@@ -174,7 +174,7 @@ public class ItemDatabase {
 
         int id = Base62.decode(code);
         try {
-            Item item = itemDao.queryBuilder().where().eq("id", id).queryForFirst();
+            Item item = itemDao.queryBuilder().where().eq("id", new SelectArg(id)).queryForFirst();
 
             if (item == null) {
                 return null;

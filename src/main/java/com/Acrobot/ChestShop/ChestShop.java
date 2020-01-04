@@ -5,6 +5,7 @@ import com.Acrobot.ChestShop.Commands.Give;
 import com.Acrobot.ChestShop.Commands.ItemInfo;
 import com.Acrobot.ChestShop.Commands.Toggle;
 import com.Acrobot.ChestShop.Commands.Version;
+import com.Acrobot.ChestShop.Commands.AccessToggle;
 import com.Acrobot.ChestShop.Configuration.Messages;
 import com.Acrobot.ChestShop.Configuration.Properties;
 import com.Acrobot.ChestShop.Database.Migrations;
@@ -38,6 +39,9 @@ import com.Acrobot.ChestShop.Metadata.ItemDatabase;
 import com.Acrobot.ChestShop.Signs.RestrictedSign;
 import com.Acrobot.ChestShop.UUIDs.NameManager;
 import com.Acrobot.ChestShop.Updater.Updater;
+
+import com.google.common.io.ByteArrayDataOutput;
+import com.google.common.io.ByteStreams;
 
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
@@ -108,6 +112,7 @@ public class ChestShop extends JavaPlugin {
         registerCommand("csVersion", new Version(), Permission.ADMIN);
         registerCommand("csGive", new Give(), Permission.ADMIN);
         registerCommand("cstoggle", new Toggle(), Permission.NOTIFY_TOGGLE);
+        registerCommand("csaccess", new AccessToggle(), Permission.ACCESS_TOGGLE);
 
         loadConfig();
 
@@ -119,6 +124,8 @@ public class ChestShop extends JavaPlugin {
         }
 
         registerEvents();
+
+        registerPluginMessagingChannels();
 
         if (Properties.LOG_TO_FILE) {
             File log = loadFile("ChestShop.log");
@@ -377,6 +384,12 @@ public class ChestShop extends JavaPlugin {
         registerEvent(new TaxModule());
     }
 
+    private void registerPluginMessagingChannels() {
+        if (Properties.BUNGEECORD_MESSAGES) {
+            getServer().getMessenger().registerOutgoingPluginChannel(this, "BungeeCord");
+        }
+    }
+
     public void registerEvent(Listener listener) {
         getServer().getPluginManager().registerEvents(listener, this);
     }
@@ -440,5 +453,16 @@ public class ChestShop extends JavaPlugin {
 
     public static void callEvent(Event event) {
         Bukkit.getPluginManager().callEvent(event);
+    }
+
+    public static void sendBungeeMessage(String playerName, String message) {
+        if (Properties.BUNGEECORD_MESSAGES && !Bukkit.getOnlinePlayers().isEmpty()) {
+            ByteArrayDataOutput out = ByteStreams.newDataOutput();
+            out.writeUTF("Message");
+            out.writeUTF(playerName);
+            out.writeUTF(message);
+
+            Bukkit.getOnlinePlayers().iterator().next().sendPluginMessage(plugin, "BungeeCord", out.toByteArray());
+        }
     }
 }
