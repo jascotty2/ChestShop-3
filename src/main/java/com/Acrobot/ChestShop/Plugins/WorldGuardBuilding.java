@@ -12,6 +12,7 @@ import com.sk89q.worldguard.protection.managers.RegionManager;
 import org.bukkit.Location;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.plugin.Plugin;
 
 /**
  * @author Acrobot
@@ -20,19 +21,21 @@ public class WorldGuardBuilding implements Listener {
     private WorldGuardPlugin worldGuard;
     private WorldGuardPlatform worldGuardPlatform;
 
-    public WorldGuardBuilding(WorldGuardPlugin plugin) {
-        this.worldGuard = plugin;
+    public WorldGuardBuilding(Plugin plugin) {
+        this.worldGuard = (WorldGuardPlugin) plugin;
         this.worldGuardPlatform = WorldGuard.getInstance().getPlatform();
     }
 
-    @EventHandler
+    @EventHandler(ignoreCancelled = true)
     public void canBuild(BuildPermissionEvent event) {
         ApplicableRegionSet regions = getApplicableRegions(event.getSign().getBlock().getLocation());
 
-        if (regions != null && Properties.WORLDGUARD_USE_FLAG) {
+        if (regions == null) {
+            event.allow(false);
+        } else if (Properties.WORLDGUARD_USE_FLAG) {
             event.allow(regions.queryState(worldGuard.wrapPlayer(event.getPlayer()), WorldGuardFlags.ENABLE_SHOP) == StateFlag.State.ALLOW);
         } else {
-            event.allow(regions == null || regions.size() != 0);
+            event.allow(regions.size() > 0);
         }
     }
 

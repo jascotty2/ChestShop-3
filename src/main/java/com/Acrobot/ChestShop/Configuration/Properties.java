@@ -6,6 +6,7 @@ import com.Acrobot.Breeze.Configuration.Annotations.PrecededBySpace;
 import com.Acrobot.Breeze.Configuration.Configuration;
 import com.Acrobot.Breeze.Configuration.ValueParser;
 import com.Acrobot.ChestShop.ChestShop;
+import com.Acrobot.ChestShop.Security;
 import org.bukkit.Material;
 
 import java.math.BigDecimal;
@@ -13,6 +14,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.LinkedHashSet;
+import java.util.Locale;
 import java.util.Set;
 import java.util.logging.Level;
 
@@ -22,16 +24,18 @@ import java.util.logging.Level;
 public class Properties {
 
     static {
-        Configuration.registerParser("StringSet", new ValueParser(){
-            public Object parseToJava(Object object) {
+        Configuration.registerParser("StringSet", new ValueParser() {
+            @Override
+            public <T> Object parseToJava(Class<T> type, Object object) {
                 if (object instanceof Collection) {
                     return new LinkedHashSet<>((Collection<String>) object);
                 }
                 return object;
             }
         });
-        Configuration.registerParser("MaterialSet", new ValueParser(){
-            public Object parseToJava(Object object) {
+        Configuration.registerParser("MaterialSet", new ValueParser() {
+            @Override
+            public <T> Object parseToJava(Class<T> type, Object object) {
                 if (object instanceof Collection) {
                     EnumSet<Material> set = EnumSet.noneOf(Material.class);
                     for (Object o : (Collection) object) {
@@ -39,7 +43,7 @@ public class Properties {
                             set.add((Material) o);
                         } else if (o instanceof String) {
                             try {
-                                set.add(Material.getMaterial(((String) o).toUpperCase()));
+                                set.add(Material.getMaterial(((String) o).toUpperCase(Locale.ROOT)));
                             } catch (IllegalArgumentException e) {
                                 ChestShop.getBukkitLogger().log(Level.WARNING, o + " is not a valid Material name in the config!");
                             }
@@ -50,7 +54,7 @@ public class Properties {
                 return object;
             }
         });
-        Configuration.registerParser("BigDecimal", new ValueParser(){
+        Configuration.registerParser("BigDecimal", new ValueParser() {
             @Override
             public String parseToYAML(Object object) {
                 if (object instanceof BigDecimal) {
@@ -59,7 +63,8 @@ public class Properties {
                 return super.parseToYAML(object);
             }
 
-            public Object parseToJava(Object object) {
+            @Override
+            public <T> Object parseToJava(Class<T> type, Object object) {
                 if (object instanceof Double) {
                     return BigDecimal.valueOf((Double) object);
                 } else if (object instanceof Long) {
@@ -150,6 +155,10 @@ public class Properties {
     public static boolean BLOCK_SHOPS_WITH_SELL_PRICE_HIGHER_THAN_BUY_PRICE = true;
 
     @PrecededBySpace
+    @ConfigurationComment("Maximum amount of items that can be bought/sold at a shop. Default 3456 is a double chest of 64 stacks.")
+    public static int MAX_SHOP_AMOUNT = 3456;
+
+    @PrecededBySpace
     @ConfigurationComment("Do you want to allow other players to build a shop on a block where there's one already?")
     public static boolean ALLOW_MULTIPLE_SHOPS_AT_ONE_BLOCK = false;
 
@@ -215,14 +224,20 @@ public class Properties {
     @ConfigurationComment("Do you want to protect shop chests with LWC?")
     public static boolean PROTECT_CHEST_WITH_LWC = false;
 
+    @ConfigurationComment("Of which type should the container protection be? Possible type: public, private, donate and on some LWC versions display")
+    public static Security.Type LWC_CHEST_PROTECTION_TYPE = Security.Type.PRIVATE;
+
     @ConfigurationComment("Do you want to protect shop signs with LWC?")
     public static boolean PROTECT_SIGN_WITH_LWC = false;
+
+    @ConfigurationComment("Of which type should the sign protection be? Possible type: public, private, donate and on some LWC versions display")
+    public static Security.Type LWC_SIGN_PROTECTION_TYPE = Security.Type.PRIVATE;
 
     @ConfigurationComment("Should the chest's LWC protection be removed once the shop sign is destroyed? ")
     public static boolean REMOVE_LWC_PROTECTION_AUTOMATICALLY = true;
 
     @PrecededBySpace
-    @ConfigurationComment("Do you want to only let people build inside regions?")
+    @ConfigurationComment("Do you want to only let people build inside WorldGuard regions?")
     public static boolean WORLDGUARD_INTEGRATION = false;
 
     @ConfigurationComment("Do you want to only let people build inside region flagged by doing /region regionName flag allow-shop allow?")
@@ -230,6 +245,14 @@ public class Properties {
 
     @ConfigurationComment("Do you want ChestShop to respect WorldGuard's chest protection?")
     public static boolean WORLDGUARD_USE_PROTECTION = false;
+
+    @PrecededBySpace
+    @ConfigurationComment("Do you want to only let people build inside GriefPrevention claims?")
+    public static boolean GRIEFPREVENTION_INTEGRATION = false;
+
+    @PrecededBySpace
+    @ConfigurationComment("Do you want to only let people build inside RedProtect regions?")
+    public static boolean REDPROTECT_INTEGRATION = false;
 
     @PrecededBySpace
     @ConfigurationComment("Do you want to deny shop access to unlogged users?")

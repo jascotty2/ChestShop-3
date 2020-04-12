@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Scanner;
 
@@ -25,7 +26,16 @@ import com.Acrobot.Breeze.Configuration.Annotations.PrecededBySpace;
  */
 public class Configuration {
     private static Map<String, ValueParser> parsers = new HashMap<>();
-    public static ValueParser DEFAULT_PARSER = new ValueParser();
+    private static final ValueParser DEFAULT_PARSER = new ValueParser();
+    private static final ValueParser ENUM_PARSER = new ValueParser() {
+        @Override
+        public <T> Object parseToJava(Class<T> type, Object object) {
+            if (object instanceof String && type.isEnum()) {
+                return Enum.valueOf((Class<? extends Enum>) type, ((String) object).toUpperCase(Locale.ROOT));
+            }
+            return object;
+        }
+    };
 
     /**
      * Loads a YAML-formatted file into a class and modifies the file if some of class's fields are missing
@@ -52,9 +62,9 @@ public class Configuration {
 
                 try {
                     if (config.isSet(path)) {
-                        field.set(null, getParser(field).parseToJava(config.get(path)));
-                    } else if (config.isSet(path.toLowerCase())) {
-                        field.set(null, getParser(field).parseToJava(config.get(path.toLowerCase())));
+                        field.set(null, getParser(field).parseToJava(field.getType(), config.get(path)));
+                    } else if (config.isSet(path.toLowerCase(Locale.ROOT))) {
+                        field.set(null, getParser(field).parseToJava(field.getType(), config.get(path.toLowerCase(Locale.ROOT))));
                     } else {
                         if (field.isAnnotationPresent(PrecededBySpace.class)) {
                             writer.newLine();
@@ -122,7 +132,7 @@ public class Configuration {
      * @param valueParser The parser itself
      */
     public static void registerParser(String name, ValueParser valueParser) {
-        parsers.put(name.toLowerCase(), valueParser);
+        parsers.put(name.toLowerCase(Locale.ROOT), valueParser);
     }
 
     /**
@@ -131,7 +141,7 @@ public class Configuration {
      * @return The parser or null if it doesn't exist
      */
     public static ValueParser getParser(String name) {
-        return parsers.get(name.toLowerCase());
+        return parsers.get(name.toLowerCase(Locale.ROOT));
     }
 
     /**
@@ -146,6 +156,9 @@ public class Configuration {
         }
         if (parser == null) {
             parser = Configuration.getParser(field.getType().getSimpleName());
+        }
+        if (parser == null && field.getType().isEnum()) {
+            parser = Configuration.ENUM_PARSER;
         }
         if (parser == null) {
             parser = Configuration.DEFAULT_PARSER;

@@ -11,6 +11,7 @@ import com.Acrobot.ChestShop.Security;
 import com.griefcraft.lwc.LWC;
 import com.griefcraft.model.Protection;
 import com.griefcraft.scripting.event.LWCProtectionRegisterEvent;
+import com.griefcraft.scripting.event.LWCProtectionRegistrationPostEvent;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import org.bukkit.Material;
@@ -39,6 +40,14 @@ public class LightweightChestProtection implements Listener {
 
     public LightweightChestProtection() {
         this.lwc = LWC.getInstance();
+        try {
+            if (Properties.PROTECT_SIGN_WITH_LWC)
+                Protection.Type.valueOf(Properties.LWC_SIGN_PROTECTION_TYPE.name());
+            if (Properties.PROTECT_CHEST_WITH_LWC)
+                Protection.Type.valueOf(Properties.LWC_CHEST_PROTECTION_TYPE.name());
+        } catch (IllegalArgumentException e) {
+            ChestShop.getBukkitLogger().warning("Your installed LWC version doesn't seem to support the configured protection type! " + e.getMessage());
+        }
         // cheap hack
         Class db = lwc.getPhysicalDatabase().getClass();
         try {
@@ -58,15 +67,25 @@ public class LightweightChestProtection implements Listener {
         Sign sign = event.getSign();
         Container connectedContainer = event.getContainer();
 
+        String message = null;
         if (Properties.PROTECT_SIGN_WITH_LWC) {
-            if (!Security.protect(player, sign.getBlock(), event.getOwnerAccount() != null ? event.getOwnerAccount().getUuid() : player.getUniqueId())) {
-                player.sendMessage(Messages.prefix(Messages.NOT_ENOUGH_PROTECTIONS));
+            if (Security.protect(player, sign.getBlock(), event.getOwnerAccount() != null ? event.getOwnerAccount().getUuid() : player.getUniqueId(), Properties.LWC_SIGN_PROTECTION_TYPE)) {
+                message = Messages.PROTECTED_SHOP_SIGN;
+            } else {
+                message = Messages.NOT_ENOUGH_PROTECTIONS;
             }
         }
 
-        if (Properties.PROTECT_CHEST_WITH_LWC && connectedContainer != null
-                && Security.protect(player, connectedContainer.getBlock(), event.getOwnerAccount() != null ? event.getOwnerAccount().getUuid() : player.getUniqueId())) {
-            player.sendMessage(Messages.prefix(Messages.PROTECTED_SHOP));
+        if (Properties.PROTECT_CHEST_WITH_LWC && connectedContainer != null) {
+            if (Security.protect(player, connectedContainer.getBlock(), event.getOwnerAccount() != null ? event.getOwnerAccount().getUuid() : player.getUniqueId(), Properties.LWC_CHEST_PROTECTION_TYPE)) {
+                message = Messages.PROTECTED_SHOP;
+            } else if (message == null) {
+                message = Messages.NOT_ENOUGH_PROTECTIONS;
+            }
+        }
+
+        if (message != null) {
+            player.sendMessage(Messages.prefix(message));
         }
     }
 
@@ -123,28 +142,42 @@ public class LightweightChestProtection implements Listener {
             return;
         }
 
+        Protection.Type type = Protection.Type.PRIVATE;
+        switch (event.getType()) {
+            case PUBLIC:
+                type = Protection.Type.PUBLIC;
+                break;
+            case DONATION:
+                type = Protection.Type.DONATION;
+                break;
+            case DISPLAY:
+                try {
+                    type = Protection.Type.valueOf("DISPLAY");
+                } catch (IllegalArgumentException ignored) {}
+                break;
+        }
+
         Protection protection = null;
         // funny bit: some versions of LWC being used on older servers don't support passing Material
         if(material_supported) {
-            protection = lwc.getPhysicalDatabase().registerProtection(block.getType(), Protection.Type.PRIVATE, worldName, event.getProtectionOwner().toString(), "", x, y, z);
+            protection = lwc.getPhysicalDatabase().registerProtection(block.getType(), type, worldName, event.getProtectionOwner().toString(), "", x, y, z);
         } else if(id_supported) {
             try {
                 // if we're on an older server that supports ids, use that.
-                protection = (Protection) protect_by_id.invoke(lwc.getPhysicalDatabase(), block.getType().getId(), Protection.Type.PRIVATE, worldName, player.getUniqueId().toString(), "", x, y, z);
+                protection = (Protection) protect_by_id.invoke(lwc.getPhysicalDatabase(), block.getType().getId(), type, worldName, player.getUniqueId().toString(), "", x, y, z);
             } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException ex) {
                 // something went wrong
                 id_supported = false;
 
-//        Protection protection = null;
 //        try {
-//            protection = lwc.getPhysicalDatabase().registerProtection(block.getType(), Protection.Type.PRIVATE, worldName, event.getProtectionOwner().toString(), "", x, y, z);
+//            protection = lwc.getPhysicalDatabase().registerProtection(block.getType(), type, worldName, event.getProtectionOwner().toString(), "", x, y, z);
 //        } catch (LinkageError e) {
 //            try {
 //                int blockId = com.griefcraft.cache.BlockCache.getInstance().getBlockId(block);
 //                if (blockId < 0) {
 //                    return;
 //                }
-//                protection = lwc.getPhysicalDatabase().registerProtection(blockId, Protection.Type.PRIVATE, worldName, event.getProtectionOwner().toString(), "", x, y, z);
+//                protection = lwc.getPhysicalDatabase().registerProtection(blockId, type, worldName, event.getProtectionOwner().toString(), "", x, y, z);
 //            } catch (LinkageError e2) {
 //                ChestShop.getBukkitLogger().warning(
 //                        "Incompatible LWC version installed! (" + lwc.getPlugin().getName() + " v" + lwc.getVersion()  + ") \n" +
@@ -156,6 +189,9 @@ public class LightweightChestProtection implements Listener {
 
         if (protection != null) {
             event.setProtected(true);
+            protection.removeCache();
+            lwc.getProtectionCache().addProtection(protection);
+            lwc.getModuleLoader().dispatchEvent(new LWCProtectionRegistrationPostEvent(protection));
         }
     }
 

@@ -19,6 +19,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 
+import java.util.Locale;
 import java.util.regex.Pattern;
 
 /**
@@ -32,7 +33,7 @@ public class ChestShopSign {
 
     public static final Pattern[] SHOP_SIGN_PATTERN = {
             Pattern.compile("^?[\\w -.:]*$"),
-            Pattern.compile("^[1-9][0-9]*$"),
+            Pattern.compile("^[1-9][0-9]{0,6}$"),
             Pattern.compile("(?i)^[\\d.bs(free) :]+$"),
             Pattern.compile("^[\\w? #:-]+$")
     };
@@ -56,7 +57,7 @@ public class ChestShopSign {
 
     public static boolean isValid(String[] line) {
         line = StringUtil.stripColourCodes(line);
-        return isValidPreparedSign(line) && (line[PRICE_LINE].toUpperCase().contains("B") || line[PRICE_LINE].toUpperCase().contains("S")) && !line[NAME_LINE].isEmpty();
+        return isValidPreparedSign(line) && (line[PRICE_LINE].toUpperCase(Locale.ROOT).contains("B") || line[PRICE_LINE].toUpperCase(Locale.ROOT).contains("S")) && !line[NAME_LINE].isEmpty();
     }
 
     public static boolean isValid(Block sign) {

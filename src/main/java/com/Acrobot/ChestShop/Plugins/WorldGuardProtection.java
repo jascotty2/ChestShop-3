@@ -2,9 +2,11 @@ package com.Acrobot.ChestShop.Plugins;
 
 import com.Acrobot.ChestShop.Events.Protection.ProtectionCheckEvent;
 import com.sk89q.worldedit.bukkit.BukkitAdapter;
-import com.sk89q.worldedit.math.BlockVector3;
+import com.sk89q.worldedit.util.Location;
+import com.sk89q.worldedit.world.World;
 import com.sk89q.worldguard.LocalPlayer;
 import com.sk89q.worldguard.WorldGuard;
+import com.sk89q.worldguard.bukkit.BukkitWorldConfiguration;
 import com.sk89q.worldguard.bukkit.WorldGuardPlugin;
 import com.sk89q.worldguard.internal.permission.RegionPermissionModel;
 import com.sk89q.worldguard.internal.platform.WorldGuardPlatform;
@@ -16,6 +18,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.plugin.Plugin;
 
 /**
  * @author Acrobot
@@ -24,8 +27,8 @@ public class WorldGuardProtection implements Listener {
     private WorldGuardPlugin worldGuard;
     private WorldGuardPlatform worldGuardPlatform;
 
-    public WorldGuardProtection(WorldGuardPlugin worldGuard) {
-        this.worldGuard = worldGuard;
+    public WorldGuardProtection(Plugin plugin) {
+        this.worldGuard =(WorldGuardPlugin) plugin;
         this.worldGuardPlatform = WorldGuard.getInstance().getPlatform();
     }
 
@@ -37,23 +40,34 @@ public class WorldGuardProtection implements Listener {
 
         Block block = event.getBlock();
         Player player = event.getPlayer();
+        LocalPlayer localPlayer = worldGuard.wrapPlayer(player);
+        Location location = BukkitAdapter.adapt(block.getLocation());
 
-        BlockVector3 blockPos = BukkitAdapter.adapt(block.getLocation()).toVector().toBlockPoint();
-        RegionManager manager = worldGuardPlatform.getRegionContainer().get(BukkitAdapter.adapt(block.getWorld()));
+        if (!canAccess(localPlayer, block, location)) {
+            event.setResult(Event.Result.DENY);
+            return;
+        }
+
+        RegionManager manager = worldGuardPlatform.getRegionContainer().get((World) location.getExtent());
         if (manager == null) {
             return;
         }
-        ApplicableRegionSet set = manager.getApplicableRegions(blockPos);
+        ApplicableRegionSet set = manager.getApplicableRegions(location.toVector().toBlockPoint());
 
-        LocalPlayer localPlayer = worldGuard.wrapPlayer(player);
-
-        if (!canAccess(localPlayer, block, set)) {
+        if (!canAccess(localPlayer, (World) location.getExtent(), set)) {
             event.setResult(Event.Result.DENY);
         }
     }
 
-    private boolean canAccess(LocalPlayer player, Block block, ApplicableRegionSet set) {
-        return new RegionPermissionModel(player).mayIgnoreRegionProtection(BukkitAdapter.adapt(block.getWorld()))
+    private boolean canAccess(LocalPlayer player, Block block, Location location) {
+        BukkitWorldConfiguration wcfg = (BukkitWorldConfiguration) worldGuardPlatform.getGlobalStateManager().get((World) location.getExtent());
+        return !wcfg.signChestProtection
+                || !wcfg.getChestProtection().isChest(BukkitAdapter.asBlockType(block.getType()))
+                || !wcfg.getChestProtection().isProtected(location, player);
+    }
+
+    private boolean canAccess(LocalPlayer player, World world, ApplicableRegionSet set) {
+        return new RegionPermissionModel(player).mayIgnoreRegionProtection(world)
                 || set.testState(player, Flags.BUILD)
                 || set.testState(player, Flags.CHEST_ACCESS);
     }
