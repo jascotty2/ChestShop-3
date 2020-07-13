@@ -1,5 +1,6 @@
 package com.Acrobot.ChestShop.Listeners.Economy;
 
+import com.Acrobot.ChestShop.ChestShop;
 import com.Acrobot.ChestShop.Events.Economy.AccountCheckEvent;
 import com.Acrobot.ChestShop.Events.Economy.CurrencyAddEvent;
 import com.Acrobot.ChestShop.Events.Economy.CurrencyAmountEvent;
@@ -37,39 +38,39 @@ public abstract class EconomyAdapter implements Listener {
      * @param event The CurrencyTransferEvent to process
      */
     protected void processTransfer(CurrencyTransferEvent event) {
-        if (event.hasBeenTransferred()) {
+        if (event.wasHandled()) {
             return;
         }
 
         BigDecimal amountSent = event.getAmountSent();
         CurrencySubtractEvent currencySubtractEvent = new CurrencySubtractEvent(amountSent, event.getSender(), event.getWorld());
         if (!NameManager.isAdminShop(event.getSender())) {
-            onCurrencySubtraction(currencySubtractEvent);
+            ChestShop.callEvent(currencySubtractEvent);
         } else {
-            currencySubtractEvent.setSubtracted(true);
+            currencySubtractEvent.setHandled(true);
         }
 
-        if (!currencySubtractEvent.isSubtracted()) {
+        if (!currencySubtractEvent.wasHandled()) {
             return;
         }
 
         BigDecimal amountReceived = event.getAmountReceived().subtract(amountSent.subtract(currencySubtractEvent.getAmount()));
         CurrencyAddEvent currencyAddEvent = new CurrencyAddEvent(amountReceived, event.getReceiver(), event.getWorld());
         if (!NameManager.isAdminShop(event.getReceiver())) {
-            onCurrencyAdd(currencyAddEvent);
+            ChestShop.callEvent(currencyAddEvent);
         } else {
-            currencyAddEvent.setAdded(true);
+            currencyAddEvent.setHandled(true);
         }
 
-        if (currencyAddEvent.isAdded()) {
-            event.setTransferred(true);
+        if (currencyAddEvent.wasHandled()) {
+            event.setHandled(true);
         } else {
             CurrencyAddEvent currencyResetEvent = new CurrencyAddEvent(
                     currencySubtractEvent.getAmount(),
                     event.getSender(),
                     event.getWorld()
             );
-            onCurrencyAdd(currencyResetEvent);
+            ChestShop.callEvent(currencyResetEvent);
         }
     }
 

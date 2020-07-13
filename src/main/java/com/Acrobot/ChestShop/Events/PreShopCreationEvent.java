@@ -47,7 +47,11 @@ public class PreShopCreationEvent extends Event implements Cancellable {
      */
     @Override
     public void setCancelled(boolean cancel) {
-        outcome = CreationOutcome.OTHER;
+        if (cancel) {
+            outcome = CreationOutcome.OTHER;
+        } else {
+            outcome = CreationOutcome.SHOP_CREATED_SUCCESSFULLY;
+        }
     }
 
     /**
@@ -177,7 +181,7 @@ public class PreShopCreationEvent extends Event implements Cancellable {
         INVALID_PRICE,
         INVALID_QUANTITY,
 
-        ITEM_AUTOFILL,
+        ITEM_AUTOFILL(false),
 
         UNKNOWN_PLAYER,
 
@@ -198,8 +202,31 @@ public class PreShopCreationEvent extends Event implements Cancellable {
         /**
          * For plugin use
          */
-        OTHER,
+        OTHER(false),
+        /**
+         * Break the sign
+         */
+        OTHER_BREAK,
 
-        SHOP_CREATED_SUCCESSFULLY
+        SHOP_CREATED_SUCCESSFULLY(false);
+
+        private final boolean breakSign;
+
+        CreationOutcome() {
+            this.breakSign = true;
+        }
+
+        CreationOutcome(boolean breakSign) {
+            this.breakSign = breakSign;
+        }
+
+        /**
+         * Get whether or not this outcome should result in the shop sign getting broken
+         *
+         * @return Whether or not the shop sign gets broken
+         */
+        public boolean shouldBreakSign() {
+            return breakSign;
+        }
     }
 }

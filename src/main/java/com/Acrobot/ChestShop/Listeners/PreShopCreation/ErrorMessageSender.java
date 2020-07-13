@@ -17,7 +17,7 @@ public class ErrorMessageSender implements Listener {
             return;
         }
 
-        String message = null;
+        Messages.Message message = null;
 
         switch (event.getOutcome()) {
             case UNKNOWN_PLAYER:
@@ -62,13 +62,15 @@ public class ErrorMessageSender implements Listener {
             case NOT_ENOUGH_MONEY:
                 message = Messages.NOT_ENOUGH_MONEY;
                 break;
+            case ITEM_AUTOFILL:
+                message = Messages.CLICK_TO_AUTOFILL_ITEM;
+                break;
             default:
                 break;
         }
 
         if (message != null) {
-            event.getPlayer().sendMessage(Messages.prefix(message));
-            event.getSign().getBlock().breakNaturally();
+            message.sendWithPrefix(event.getPlayer());
         }
     }
 }

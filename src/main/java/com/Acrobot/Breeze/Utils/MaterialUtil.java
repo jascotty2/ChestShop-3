@@ -2,14 +2,17 @@ package com.Acrobot.Breeze.Utils;
 
 import com.Acrobot.Breeze.Collection.SimpleCache;
 import com.Acrobot.ChestShop.ChestShop;
+import com.Acrobot.ChestShop.Configuration.Messages;
 import com.Acrobot.ChestShop.Configuration.Properties;
 import com.Acrobot.ChestShop.Events.ItemParseEvent;
 import com.Acrobot.ChestShop.Events.MaterialParseEvent;
 import com.google.common.collect.ImmutableMap;
 import de.themoep.ShowItem.api.ShowItem;
+import de.themoep.minedown.Replacer;
 import info.somethingodd.OddItem.OddItem;
+import net.md_5.bungee.api.chat.BaseComponent;
+import net.md_5.bungee.chat.ComponentSerializer;
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.configuration.file.YamlConstructor;
 import org.bukkit.configuration.file.YamlRepresenter;
@@ -25,6 +28,7 @@ import org.yaml.snakeyaml.nodes.Tag;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -128,7 +132,7 @@ public class MaterialUtil {
      * @return Material found
      */
     public static Material getMaterial(String name) {
-        String formatted = name.replaceAll("([a-z])([A-Z1-9])", "$1_$2").replace(' ', '_').toUpperCase(Locale.ROOT);
+        String formatted = name.replaceAll("(?<!^)([A-Z1-9])", "_$1").replace(' ', '_').toUpperCase(Locale.ROOT);
 
         Material material = MATERIAL_CACHE.get(formatted);
         if (material != null) {
@@ -398,7 +402,7 @@ public class MaterialUtil {
                 return E.valueOf(values[0].getDeclaringClass(), name.toUpperCase(Locale.ROOT));
             } catch (IllegalArgumentException exception) {
                 E currentEnum = null;
-                String[] typeParts = name.replaceAll("([a-z])([A-Z1-9])", "$1_$2").toUpperCase(Locale.ROOT).split("[ _]");
+                String[] typeParts = name.replaceAll("(?<!^)([A-Z1-9])", "_$1").toUpperCase(Locale.ROOT).split("[ _]");
                 int length = Short.MAX_VALUE;
                 for (E e : values) {
                     String enumName = e.name();
@@ -520,7 +524,19 @@ public class MaterialUtil {
          * @param message The raw message
          * @param stock   The items in stock
          */
-        public static boolean sendMessage(Player player, String message, ItemStack[] stock) {
+        public static boolean sendMessage(Player player, Messages.Message message, ItemStack[] stock, Map<String, String> replacementMap, String... replacements) {
+            return sendMessage(player, player.getName(), message, stock, replacementMap, replacements);
+        }
+
+        /**
+         * Send a message with hover info and icons
+         *
+         * @param player        The player to send the message to
+         * @param playerName    The name of the player in case he is offline and bungee messages are enabled
+         * @param message       The raw message
+         * @param stock         The items in stock
+         */
+        public static boolean sendMessage(Player player, String playerName, Messages.Message message, ItemStack[] stock, Map<String, String> replacementMap, String... replacements) {
             if (showItem == null) {
                 return false;
             }
@@ -537,23 +553,20 @@ public class MaterialUtil {
 
             String joinedItemJson = itemJson.stream().collect(Collectors.joining("," + new JSONObject(ImmutableMap.of("text", " ")).toJSONString() + ", "));
 
-            String prevColor = "";
-            List<String> parts = new ArrayList<>();
-            for (String s : message.split("%item")) {
-                parts.add(new JSONObject(ImmutableMap.of("text", prevColor + s)).toJSONString());
-                prevColor = ChatColor.getLastColors(s);
+            Map<String, String> newMap = new LinkedHashMap<>(replacementMap);
+            newMap.put("material", "item");
+            BaseComponent[] components = new Replacer()
+                    .placeholderSuffix("")
+                    .replace("item", ComponentSerializer.parse("[" + joinedItemJson + "]"))
+                    .replaceIn(message.getComponents(player, true, newMap, replacements));
+            if (player != null) {
+                player.spigot().sendMessage(components);
+                return true;
+            } else if (playerName != null) {
+                ChestShop.sendBungeeMessage(playerName, components);
+                return true;
             }
 
-            String messageJsonString = String.join("," + joinedItemJson + ",", parts);
-
-            while (messageJsonString.startsWith(",")) {
-                messageJsonString = messageJsonString.substring(1);
-            }
-            while (messageJsonString.endsWith(",")) {
-                messageJsonString = messageJsonString.substring(0, messageJsonString.length() - 1);
-            }
-
-            showItem.tellRaw(player, messageJsonString);
             return true;
         }
     }

@@ -16,6 +16,7 @@ import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Set;
+import java.util.UUID;
 import java.util.logging.Level;
 
 /**
@@ -75,14 +76,48 @@ public class Properties {
                 return object;
             }
         });
+        Configuration.registerParser("UUID", new ValueParser() {
+            @Override
+            public String parseToYAML(Object object) {
+                if (object instanceof UUID) {
+                    return object.toString();
+                }
+                return super.parseToYAML(object);
+            }
+
+            @Override
+            public <T> Object parseToJava(Class<T> type, Object object) {
+                if (object instanceof String) {
+                    return UUID.fromString((String) object);
+                }
+                return object;
+            }
+        });
     }
 
+    @ConfigurationComment("Should the plugin log some messages that are useful for debugging?")
+    public static boolean DEBUG = false;
+
+    @PrecededBySpace
     @ConfigurationComment("Do you want to turn off the automatic updates of ChestShop?")
-    public static boolean TURN_OFF_UPDATES = false;
+    public static boolean TURN_OFF_UPDATES = true;
+
+    @ConfigurationComment("Do you want to turn off the automatic notifications for new development builds?")
+    public static boolean TURN_OFF_DEV_UPDATE_NOTIFIER = false;
+
+    @ConfigurationComment("Do you want to include some values of this config in the metrics? (This will not leak sensitive data but help in the development process)")
+    public static boolean INCLUDE_SETTINGS_IN_METRICS = true;
 
     @PrecededBySpace
     @ConfigurationComment("How large should the internal caches be?")
     public static int CACHE_SIZE = 1000;
+
+    @PrecededBySpace
+    @ConfigurationComment("The default language when the client's language can't be found.")
+    public static String DEFAULT_LANGUAGE = "en";
+
+    @ConfigurationComment("Should the plugin try to use a language file that matches the client's locale setting?")
+    public static boolean USE_CLIENT_LOCALE = true;
 
     @PrecededBySpace
     @ConfigurationComment("What containers are allowed to hold a shop? (Only blocks with inventories work!)")
@@ -108,6 +143,9 @@ public class Properties {
     @ConfigurationComment("If true, people will be able to buy/sell in 64 stacks while holding the crouch button.")
     public static boolean SHIFT_SELLS_IN_STACKS = false;
 
+    @ConfigurationComment("If true, people will be able to sell/buy everything available of the same type.")
+    public static boolean SHIFT_SELLS_EVERYTHING = false;
+
     @ConfigurationComment("What can you do by clicking shift with SHIFT_SELLS_IN_STACKS turned on? (ALL/BUY/SELL)")
     public static String SHIFT_ALLOWS = "ALL";
 
@@ -132,8 +170,11 @@ public class Properties {
     @ConfigurationComment("First line of your Admin Shop's sign should look like this:")
     public static String ADMIN_SHOP_NAME = "Admin Shop";
 
-    @ConfigurationComment("The economy account which Admin Shops should use and to which all taxes will go")
+    @ConfigurationComment("The name of the economy account which Admin Shops should use and to which all taxes will go")
     public static String SERVER_ECONOMY_ACCOUNT = "";
+
+    @ConfigurationComment("The uuid of the economy account for the Admin Shop. Useful for fake accounts as normally only accounts of players work")
+    public static UUID SERVER_ECONOMY_ACCOUNT_UUID = new UUID(0, 0);
 
     @ConfigurationComment("Percent of the price that should go to the server's account. (100 = 100 percent)")
     public static int TAX_AMOUNT = 0;
@@ -221,6 +262,9 @@ public class Properties {
     @ConfigurationComment("Do you want to disable the hopper protection, which prevents Hopper-Minecarts from taking items out of shops?")
     public static boolean TURN_OFF_HOPPER_PROTECTION = false;
 
+    @ConfigurationComment("Only allow users to buy/sell that have access to the sign's protection? (E.g. LWC protection)")
+    public static boolean CHECK_ACCESS_FOR_SHOP_USE = false;
+
     @ConfigurationComment("Do you want to protect shop chests with LWC?")
     public static boolean PROTECT_CHEST_WITH_LWC = false;
 
@@ -235,6 +279,9 @@ public class Properties {
 
     @ConfigurationComment("Should the chest's LWC protection be removed once the shop sign is destroyed? ")
     public static boolean REMOVE_LWC_PROTECTION_AUTOMATICALLY = true;
+
+    @ConfigurationComment("Should LWC limits block shop creations?")
+    public static boolean LWC_LIMITS_BLOCK_CREATION = true;
 
     @PrecededBySpace
     @ConfigurationComment("Do you want to only let people build inside WorldGuard regions?")

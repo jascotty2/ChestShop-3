@@ -42,7 +42,6 @@ import static com.Acrobot.ChestShop.Events.TransactionEvent.TransactionType;
 import static com.Acrobot.ChestShop.Events.TransactionEvent.TransactionType.BUY;
 import static com.Acrobot.ChestShop.Events.TransactionEvent.TransactionType.SELL;
 import static com.Acrobot.ChestShop.Permission.OTHER_NAME_CREATE;
-import static com.Acrobot.ChestShop.Permission.OTHER_NAME_DESTROY;
 import static com.Acrobot.ChestShop.Signs.ChestShopSign.*;
 import static org.bukkit.event.block.Action.LEFT_CLICK_BLOCK;
 import static org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK;
@@ -67,14 +66,14 @@ public class PlayerInteract implements Listener {
             }
 
             if (!Security.canAccess(player, block)) {
-                player.sendMessage(Messages.prefix(Messages.ACCESS_DENIED));
                 event.setCancelled(true);
+                Messages.ACCESS_DENIED.sendWithPrefix(player);
             }
 
             return;
         }
 
-        if (!isSign(block) || player.getInventory().getItemInMainHand().getType() == Material.SIGN) // Blocking accidental sign edition
+        if (!isSign(block) || player.getInventory().getItemInMainHand().getType().name().contains("SIGN")) // Blocking accidental sign edition
             return;
 
         Sign sign = (Sign) block.getState();
@@ -106,10 +105,10 @@ public class PlayerInteract implements Listener {
                         sign.update();
                     }
                 } else {
-                    player.sendMessage(Messages.prefix(Messages.NO_ITEM_IN_HAND));
+                    Messages.NO_ITEM_IN_HAND.sendWithPrefix(player);
                 }
             } else {
-                player.sendMessage(Messages.prefix(Messages.ACCESS_DENIED));
+                Messages.ACCESS_DENIED.sendWithPrefix(player);
             }
             return;
         }
@@ -118,7 +117,7 @@ public class PlayerInteract implements Listener {
             if (Properties.IGNORE_ACCESS_PERMS || ChestShopSign.isOwner(player, sign)) {
                 if (Properties.ALLOW_SIGN_CHEST_OPEN && !(Properties.IGNORE_CREATIVE_MODE && player.getGameMode() == GameMode.CREATIVE)) {
                     if (player.isSneaking() || player.isInsideVehicle()
-                            || (Properties.ALLOW_LEFT_CLICK_DESTROYING && action == LEFT_CLICK_BLOCK && ChestShopSign.hasPermission(player, OTHER_NAME_DESTROY, sign))) {
+                            || (Properties.ALLOW_LEFT_CLICK_DESTROYING && action == LEFT_CLICK_BLOCK)) {
                         return;
                     }
                     event.setCancelled(true);
@@ -132,6 +131,13 @@ public class PlayerInteract implements Listener {
 
         if (action == RIGHT_CLICK_BLOCK) {
             event.setCancelled(true);
+        } else if (action == LEFT_CLICK_BLOCK && !Properties.TURN_OFF_SIGN_PROTECTION && !ChestShopSign.canAccess(player, sign)) {
+            event.setCancelled(true);
+        }
+
+        if (Properties.CHECK_ACCESS_FOR_SHOP_USE && !Security.canAccess(player, block, true)) {
+            Messages.TRADE_DENIED.sendWithPrefix(player);
+            return;
         }
 
         //Bukkit.getLogger().info("ChestShop - DEBUG - "+block.getWorld().getName()+": "+block.getLocation().getBlockX()+", "+block.getLocation().getBlockY()+", "+block.getLocation().getBlockZ());
@@ -157,7 +163,7 @@ public class PlayerInteract implements Listener {
         Bukkit.getPluginManager().callEvent(accountQueryEvent);
         Account account = accountQueryEvent.getAccount();
         if (account == null) {
-            player.sendMessage(Messages.prefix(Messages.PLAYER_NOT_FOUND));
+            Messages.PLAYER_NOT_FOUND.sendWithPrefix(player);
             return null;
         }
 
@@ -168,7 +174,7 @@ public class PlayerInteract implements Listener {
             AccountCheckEvent event = new AccountCheckEvent(account.getUuid(), player.getWorld());
             Bukkit.getPluginManager().callEvent(event);
             if(!event.hasAccount()) {
-                player.sendMessage(Messages.prefix(Messages.NO_ECONOMY_ACCOUNT));
+                Messages.NO_ECONOMY_ACCOUNT.sendWithPrefix(player);
                 return null;
             }
         }
@@ -183,7 +189,7 @@ public class PlayerInteract implements Listener {
         Bukkit.getPluginManager().callEvent(parseEvent);
         ItemStack item = parseEvent.getItem();
         if (item == null) {
-            player.sendMessage(Messages.prefix(Messages.INVALID_SHOP_DETECTED));
+            Messages.INVALID_SHOP_DETECTED.sendWithPrefix(player);
             return null;
         }
 
@@ -193,7 +199,7 @@ public class PlayerInteract implements Listener {
         } catch (NumberFormatException notANumber) {}
 
         if (amount < 1 || amount > Properties.MAX_SHOP_AMOUNT) {
-            player.sendMessage(Messages.prefix(Messages.INVALID_SHOP_PRICE));
+            Messages.INVALID_SHOP_PRICE.sendWithPrefix(player);
             return null;
         }
 
@@ -202,6 +208,20 @@ public class PlayerInteract implements Listener {
             if (newAmount > 0) {
                 price = price.divide(BigDecimal.valueOf(amount), MathContext.DECIMAL128).multiply(BigDecimal.valueOf(newAmount)).setScale(Properties.PRICE_PRECISION, BigDecimal.ROUND_HALF_UP);
                 amount = newAmount;
+            }
+        } else if (Properties.SHIFT_SELLS_EVERYTHING && player.isSneaking() && !price.equals(PriceUtil.NO_PRICE) && isAllowedForShift(action == buy)) {
+            if (action != buy) {
+                int newAmount = InventoryUtil.getAmount(item, player.getInventory());
+                if (newAmount > 0) {
+                    price = price.divide(BigDecimal.valueOf(amount), MathContext.DECIMAL128).multiply(BigDecimal.valueOf(newAmount)).setScale(Properties.PRICE_PRECISION, BigDecimal.ROUND_HALF_UP);
+                    amount = newAmount;
+                }
+            } else if (!adminShop && ownerInventory != null) {
+                int newAmount = InventoryUtil.getAmount(item, ownerInventory);
+                if (newAmount > 0) {
+                    price = price.divide(BigDecimal.valueOf(amount), MathContext.DECIMAL128).multiply(BigDecimal.valueOf(newAmount)).setScale(Properties.PRICE_PRECISION, BigDecimal.ROUND_HALF_UP);
+                    amount = newAmount;
+                }
             }
         }
 
@@ -250,7 +270,7 @@ public class PlayerInteract implements Listener {
         Container container = uBlock.findConnectedContainer(sign);
 
         if (container == null) {
-            player.sendMessage(Messages.prefix(Messages.NO_CHEST_DETECTED));
+            Messages.NO_CHEST_DETECTED.sendWithPrefix(player);
             return;
         }
 

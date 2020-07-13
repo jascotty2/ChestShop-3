@@ -46,7 +46,7 @@ public class CreationFeeGetter implements Listener {
         CurrencySubtractEvent subtractionEvent = new CurrencySubtractEvent(shopCreationPrice, player);
         ChestShop.callEvent(subtractionEvent);
 
-        if (!subtractionEvent.isSubtracted()) {
+        if (!subtractionEvent.wasHandled()) {
             event.setOutcome(PreShopCreationEvent.CreationOutcome.NOT_ENOUGH_MONEY);
             event.setSignLines(new String[4]);
             return;
@@ -60,6 +60,6 @@ public class CreationFeeGetter implements Listener {
             ChestShop.callEvent(currencyAddEvent);
         }
 
-        player.sendMessage(Messages.prefix(Messages.SHOP_FEE_PAID.replace("%amount", Economy.formatBalance(shopCreationPrice))));
+        Messages.SHOP_FEE_PAID.sendWithPrefix(player, "amount", Economy.formatBalance(shopCreationPrice));
     }
 }

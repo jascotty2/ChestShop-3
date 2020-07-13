@@ -3,25 +3,32 @@ package com.Acrobot.ChestShop.Plugins;
 import com.Acrobot.ChestShop.ChestShop;
 import com.Acrobot.ChestShop.Configuration.Messages;
 import com.Acrobot.ChestShop.Configuration.Properties;
+import com.Acrobot.ChestShop.Events.PreShopCreationEvent;
 import com.Acrobot.ChestShop.Events.Protection.ProtectBlockEvent;
 import com.Acrobot.ChestShop.Events.Protection.ProtectionCheckEvent;
 import com.Acrobot.ChestShop.Events.ShopCreatedEvent;
 import com.Acrobot.ChestShop.Events.ShopDestroyedEvent;
 import com.Acrobot.ChestShop.Security;
+import com.Acrobot.ChestShop.Utils.uBlock;
 import com.griefcraft.lwc.LWC;
 import com.griefcraft.model.Protection;
+import com.griefcraft.modules.limits.LimitsModule;
+import com.griefcraft.modules.limits.LimitsV2;
 import com.griefcraft.scripting.event.LWCProtectionRegisterEvent;
 import com.griefcraft.scripting.event.LWCProtectionRegistrationPostEvent;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockState;
 import org.bukkit.block.Container;
 import org.bukkit.block.Sign;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+
+import static com.Acrobot.ChestShop.Events.PreShopCreationEvent.CreationOutcome.OTHER_BREAK;
 
 /**
  * @author Acrobot
@@ -37,9 +44,13 @@ public class LightweightChestProtection implements Listener {
      */
     private boolean material_supported = false;
     Method protect_by_id = null;
+    private final LimitsModule limitsModule;
+    private final LimitsV2 limitsV2;
 
     public LightweightChestProtection() {
         this.lwc = LWC.getInstance();
+        this.limitsModule = (LimitsModule) lwc.getModuleLoader().getModule(LimitsModule.class);
+        this.limitsV2 = (LimitsV2) lwc.getModuleLoader().getModule(LimitsV2.class);
         try {
             if (Properties.PROTECT_SIGN_WITH_LWC)
                 Protection.Type.valueOf(Properties.LWC_SIGN_PROTECTION_TYPE.name());
@@ -61,13 +72,40 @@ public class LightweightChestProtection implements Listener {
         } catch (NoSuchMethodException | SecurityException ignore) {}
     }
 
+    @EventHandler(ignoreCancelled = true)
+    public void onPreShopCreation(PreShopCreationEvent event) {
+        if (Properties.LWC_LIMITS_BLOCK_CREATION) {
+            if (Properties.PROTECT_SIGN_WITH_LWC) {
+                if (isAtLimit(event.getPlayer(), event.getSign())) {
+                    event.setOutcome(OTHER_BREAK);
+                    return;
+                }
+            }
+
+            if (Properties.PROTECT_CHEST_WITH_LWC) {
+                Container container = uBlock.findConnectedContainer(event.getSign());
+                if (container != null && isAtLimit(event.getPlayer(), container)) {
+                    event.setOutcome(OTHER_BREAK);
+                    return;
+                }
+            }
+        }
+    }
+
+    private boolean isAtLimit(Player player, BlockState blockState) {
+        LWCProtectionRegisterEvent protectionEvent = new LWCProtectionRegisterEvent(player, blockState.getBlock());
+        limitsModule.onRegisterProtection(protectionEvent);
+        limitsV2.onRegisterProtection(protectionEvent);
+        return protectionEvent.isCancelled();
+    }
+
     @EventHandler
     public static void onShopCreation(ShopCreatedEvent event) {
         Player player = event.getPlayer();
         Sign sign = event.getSign();
         Container connectedContainer = event.getContainer();
 
-        String message = null;
+        Messages.Message message = null;
         if (Properties.PROTECT_SIGN_WITH_LWC) {
             if (Security.protect(player, sign.getBlock(), event.getOwnerAccount() != null ? event.getOwnerAccount().getUuid() : player.getUniqueId(), Properties.LWC_SIGN_PROTECTION_TYPE)) {
                 message = Messages.PROTECTED_SHOP_SIGN;
@@ -85,7 +123,7 @@ public class LightweightChestProtection implements Listener {
         }
 
         if (message != null) {
-            player.sendMessage(Messages.prefix(message));
+            message.sendWithPrefix(player);
         }
     }
 
@@ -168,6 +206,7 @@ public class LightweightChestProtection implements Listener {
             } catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException ex) {
                 // something went wrong
                 id_supported = false;
+			}
 
 //        try {
 //            protection = lwc.getPhysicalDatabase().registerProtection(block.getType(), type, worldName, event.getProtectionOwner().toString(), "", x, y, z);
@@ -184,7 +223,6 @@ public class LightweightChestProtection implements Listener {
 //                                "Material method error: " + e.getMessage() + "\n" +
 //                                "Block cache/type id error: " + e2.getMessage()
 //                );
-            }
         }
 
         if (protection != null) {

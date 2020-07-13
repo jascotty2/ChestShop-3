@@ -3,10 +3,12 @@ package com.Acrobot.ChestShop.UUIDs;
 import com.Acrobot.Breeze.Utils.Encoding.Base62;
 import com.Acrobot.Breeze.Utils.NameUtil;
 import com.Acrobot.Breeze.Collection.SimpleCache;
+import com.Acrobot.Breeze.Utils.NumberUtil;
 import com.Acrobot.ChestShop.ChestShop;
 import com.Acrobot.ChestShop.Configuration.Properties;
 import com.Acrobot.ChestShop.Database.Account;
 import com.Acrobot.ChestShop.Database.DaoCreator;
+import com.Acrobot.ChestShop.Events.AccountAccessEvent;
 import com.Acrobot.ChestShop.Events.AccountQueryEvent;
 import com.Acrobot.ChestShop.Permission;
 import com.Acrobot.ChestShop.Signs.ChestShopSign;
@@ -47,6 +49,14 @@ public class NameManager implements Listener {
     private static Account serverEconomyAccount;
     private static int uuidVersion = -1;
 
+    public static int getAccountCount() {
+        try {
+            return NumberUtil.toInt(accounts.queryBuilder().countOf() - 1);
+        } catch (SQLException e) {
+            return 0;
+        }
+    }
+
     /**
      * Get or create an account for a player
      *
@@ -55,13 +65,25 @@ public class NameManager implements Listener {
      * @throws IllegalArgumentException when an invalid player object was passed
      */
     public static Account getOrCreateAccount(OfflinePlayer player) {
-        Validate.notNull(player.getName(), "Name of player is null?");
-        Validate.notNull(player.getUniqueId(), "UUID of player is null?");
-        Validate.isTrue(player.getUniqueId().version() == uuidVersion, "Invalid OfflinePlayer! " + player.getUniqueId() + " is not of server version " + uuidVersion);
+        return getOrCreateAccount(player.getUniqueId(), player.getName());
+    }
 
-        Account account = getAccount(player.getUniqueId());
+    /**
+     * Get or create an account for a player
+     *
+     * @param id The UUID of the player to get or create the account for
+     * @param name The name of the player to get or create the account fo
+     * @return The account info
+     * @throws IllegalArgumentException when id or name are null
+     */
+    public static Account getOrCreateAccount(UUID id, String name) {
+        Validate.notNull(id, "UUID of player is null?");
+        Validate.notNull(name, "Name of player " + id + " is null?");
+        Validate.isTrue(uuidVersion < 0 || id.version() == uuidVersion, "Invalid OfflinePlayer! " + id + " is not of server version " + uuidVersion);
+
+        Account account = getAccount(id);
         if (account == null) {
-            account = storeUsername(new PlayerDTO(player.getUniqueId(), player.getName()));
+            account = storeUsername(new PlayerDTO(id, name));
         }
         return account;
     }
@@ -124,7 +146,7 @@ public class NameManager implements Listener {
     @EventHandler
     public static void onAccountQuery(AccountQueryEvent event) {
         if (event.getAccount() == null) {
-            event.setAccount(getLastAccountFromShortName(event.getName()));
+            event.setAccount(getLastAccountFromShortName(event.getName(), event.searchOfflinePlayers()));
         }
     }
 
@@ -188,7 +210,19 @@ public class NameManager implements Listener {
      */
     @Deprecated
     public static Account getLastAccountFromShortName(String shortName) {
-        Account account = getAccountFromShortName(shortName); // first get the account associated with the short name
+        return getLastAccountFromShortName(shortName, true);
+    }
+
+    /**
+     * Get the information from the last time a player logged in that previously used the shortened name
+     *
+     * @param shortName The name of the player to get the last account for
+     * @param searchOfflinePlayer Whether or not to search the offline players too
+     * @return The last account or <tt>null</tt> if none was found
+     * @throws IllegalArgumentException if the username is empty
+     */
+    private static Account getLastAccountFromShortName(String shortName, boolean searchOfflinePlayer) {
+        Account account = getAccountFromShortName(shortName, searchOfflinePlayer); // first get the account associated with the short name
         if (account != null) {
             return getAccount(account.getUuid()); // then get the last account that was online with that UUID
         }
@@ -350,9 +384,26 @@ public class NameManager implements Listener {
             return true;
         }
 
-        Account account = getAccountFromShortName(name, false);
-        return account != null && (account.getUuid().equals(player.getUniqueId())
-                || (!account.getName().equalsIgnoreCase(name) && Permission.otherName(player, base, account.getName())));
+        AccountQueryEvent queryEvent = new AccountQueryEvent(name);
+        queryEvent.searchOfflinePlayers(false);
+        ChestShop.callEvent(queryEvent);
+        Account account = queryEvent.getAccount();
+        if (account == null) {
+            return false;
+        }
+        if (!account.getName().equalsIgnoreCase(name) && Permission.otherName(player, base, account.getName())) {
+            return true;
+        }
+        AccountAccessEvent event = new AccountAccessEvent(player, account);
+        ChestShop.callEvent(event);
+        return event.canAccess();
+    }
+
+    @EventHandler
+    public static void onAccountAccessCheck(AccountAccessEvent event) {
+        if (!event.canAccess()) {
+            event.setAccess(event.getPlayer().getUniqueId().equals(event.getAccount().getUuid()));
+        }
     }
 
     public static boolean isAdminShop(UUID uuid) {
@@ -375,8 +426,13 @@ public class NameManager implements Listener {
 
             if (!Properties.SERVER_ECONOMY_ACCOUNT.isEmpty()) {
                 serverEconomyAccount = getAccount(Properties.SERVER_ECONOMY_ACCOUNT);
-                if (serverEconomyAccount == null || serverEconomyAccount.getUuid() == null) {
-                    serverEconomyAccount = null;
+            }
+            if (serverEconomyAccount == null && !Properties.SERVER_ECONOMY_ACCOUNT.isEmpty() && !Properties.SERVER_ECONOMY_ACCOUNT_UUID.equals(new UUID(0, 0))) {
+                serverEconomyAccount = getOrCreateAccount(Properties.SERVER_ECONOMY_ACCOUNT_UUID, Properties.SERVER_ECONOMY_ACCOUNT);
+            }
+            if (serverEconomyAccount == null || serverEconomyAccount.getUuid() == null) {
+                serverEconomyAccount = null;
+                if (!Properties.SERVER_ECONOMY_ACCOUNT.isEmpty()) {
                     ChestShop.getBukkitLogger().log(Level.WARNING, "Server economy account setting '" + Properties.SERVER_ECONOMY_ACCOUNT + "' doesn't seem to be the name of a known player! Please log in at least once in order for the server economy account to work.");
                 }
             }

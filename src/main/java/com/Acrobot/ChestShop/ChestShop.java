@@ -19,6 +19,7 @@ import com.Acrobot.ChestShop.Listeners.AuthMeChestShopListener;
 import com.Acrobot.ChestShop.Listeners.GarbageTextListener;
 import com.Acrobot.ChestShop.Listeners.Item.ItemMoveListener;
 import com.Acrobot.ChestShop.Listeners.ItemInfoListener;
+import com.Acrobot.ChestShop.Listeners.Modules.MetricsModule;
 import com.Acrobot.ChestShop.Listeners.SignParseListener;
 import com.Acrobot.ChestShop.Listeners.Modules.DiscountModule;
 import com.Acrobot.ChestShop.Listeners.Modules.PriceRestrictionModule;
@@ -38,11 +39,15 @@ import com.Acrobot.ChestShop.Logging.FileFormatter;
 import com.Acrobot.ChestShop.Metadata.ItemDatabase;
 import com.Acrobot.ChestShop.Signs.RestrictedSign;
 import com.Acrobot.ChestShop.UUIDs.NameManager;
+import com.Acrobot.ChestShop.Updater.JenkinsBuildsNotifier;
 import com.Acrobot.ChestShop.Updater.Updater;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.io.ByteArrayDataOutput;
 import com.google.common.io.ByteStreams;
 
+import net.md_5.bungee.api.chat.BaseComponent;
+import net.md_5.bungee.chat.ComponentSerializer;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Marker;
@@ -52,7 +57,9 @@ import org.apache.logging.log4j.core.config.LoggerConfig;
 import org.apache.logging.log4j.core.filter.AbstractFilter;
 import org.apache.logging.log4j.message.Message;
 
+import org.bstats.bukkit.Metrics;
 import org.bukkit.Bukkit;
+import org.bukkit.Material;
 import org.bukkit.Server;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.PluginCommand;
@@ -66,9 +73,15 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.jar.JarFile;
 import java.util.logging.FileHandler;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 /**
  * Main file of the plugin
@@ -110,6 +123,7 @@ public class ChestShop extends JavaPlugin {
 
         registerCommand("iteminfo", new ItemInfo(), Permission.ITEMINFO);
         registerCommand("csVersion", new Version(), Permission.ADMIN);
+        registerCommand("csMetrics", new com.Acrobot.ChestShop.Commands.Metrics(), Permission.ADMIN);
         registerCommand("csGive", new Give(), Permission.ADMIN);
         registerCommand("cstoggle", new Toggle(), Permission.NOTIFY_TOGGLE);
         registerCommand("csaccess", new AccessToggle(), Permission.ACCESS_TOGGLE);
@@ -142,6 +156,7 @@ public class ChestShop extends JavaPlugin {
         }
 
         startStatistics();
+        startBuildNotificatier();
         startUpdater();
     }
 
@@ -153,12 +168,13 @@ public class ChestShop extends JavaPlugin {
     }
 
     public void loadConfig() {
-        Configuration.pairFileAndClass(loadFile("config.yml"), Properties.class);
-        Configuration.pairFileAndClass(loadFile("local.yml"), Messages.class);
+        Configuration.pairFileAndClass(loadFile("config.yml"), Properties.class, getBukkitLogger());
+
+        Messages.load();
 
         NameManager.load();
 
-        commands.forEach(c -> c.setPermissionMessage(Messages.prefix(Messages.ACCESS_DENIED)));
+        commands.forEach(c -> c.setPermissionMessage(Messages.ACCESS_DENIED.getTextWithPrefix(null)));
     }
 
     private void turnOffDatabaseLogging() {
@@ -374,6 +390,7 @@ public class ChestShop extends JavaPlugin {
 
     private void registerModules() {
         registerEvent(new DiscountModule());
+        registerEvent(new MetricsModule());
         registerEvent(new PriceRestrictionModule());
 
         registerEconomicalModules();
@@ -395,22 +412,70 @@ public class ChestShop extends JavaPlugin {
     }
 
     private void startStatistics() {
+        Metrics bStats = new Metrics(this, 1109);
         try {
-            new org.mcstats.Metrics(this).start();
-        } catch (IOException ex) {
-            ChestShop.getBukkitLogger().severe("There was an error while submitting MCStats statistics.");
-        }
-        new org.bstats.bukkit.MetricsLite(this, 1109);
+            String dist = new JarFile(this.getFile()).getManifest().getMainAttributes().getValue("Distribution-Type");
+            bStats.addCustomChart(new Metrics.SimplePie("distributionType", () -> dist));
+        } catch (IOException ignored) {}
+
+        bStats.addCustomChart(new Metrics.SingleLineChart("shopAccounts", NameManager::getAccountCount));
+        bStats.addCustomChart(new Metrics.MultiLineChart("transactionCount", () -> ImmutableMap.of(
+                "total", MetricsModule.getTotalTransactions(),
+                "buy", MetricsModule.getBuyTransactions(),
+                "sell", MetricsModule.getSellTransactions()
+        )));bStats.addCustomChart(new Metrics.MultiLineChart("itemCount", () -> ImmutableMap.of(
+                "total", MetricsModule.getTotalItemsCount(),
+                "buy", MetricsModule.getSoldItemsCount(),
+                "sell", MetricsModule.getBoughtItemsCount()
+        )));
+
+        bStats.addCustomChart(new Metrics.SimplePie("includeSettingsInMetrics", () -> Properties.INCLUDE_SETTINGS_IN_METRICS ? "enabled" : "disabled"));
+        if (!Properties.INCLUDE_SETTINGS_IN_METRICS) return;
+
+        bStats.addCustomChart(new Metrics.AdvancedBarChart("pluginProperties", () -> {
+            Map<String, int[]> map = new LinkedHashMap<>();
+            map.put("reverse-buttons", getChartArray(Properties.REVERSE_BUTTONS));
+            map.put("shift-sells-in-stacks", getChartArray(Properties.SHIFT_SELLS_IN_STACKS));
+            map.put("shift-sells-everything", getChartArray(Properties.SHIFT_SELLS_EVERYTHING));
+            map.put("allow-sign-chest-open", getChartArray(!Properties.ALLOW_SIGN_CHEST_OPEN));
+            map.put("remove-empty-shops", getChartArray(!Properties.REMOVE_EMPTY_SHOPS));
+            map.put("remove-empty-chests", getChartArray(!Properties.REMOVE_EMPTY_CHESTS));
+            map.put("uses-server-economy-account", getChartArray(!Properties.SERVER_ECONOMY_ACCOUNT.isEmpty()));
+            map.put("uses-server-economy-account-uuid", getChartArray(!Properties.SERVER_ECONOMY_ACCOUNT_UUID.equals(new UUID(0, 0))));
+            map.put("allow-multiple-shops-at-one-block", getChartArray(Properties.ALLOW_MULTIPLE_SHOPS_AT_ONE_BLOCK));
+            map.put("allow-partial-transactions", getChartArray(Properties.ALLOW_PARTIAL_TRANSACTIONS));
+            map.put("bungeecord-messages", getChartArray(Properties.BUNGEECORD_MESSAGES));
+            map.put("log-to-console", getChartArray(Properties.LOG_TO_CONSOLE));
+            map.put("log-to-file", getChartArray(Properties.LOG_TO_FILE));
+            return map;
+        }));
+        bStats.addCustomChart(new Metrics.SimpleBarChart("shopContainers",
+                () -> Properties.SHOP_CONTAINERS.stream().map(Material::name).collect(Collectors.toMap(k -> k, k -> 1))));
+    }
+
+    private int[] getChartArray(boolean value) {
+        return new int[]{!value ? 1 : 0, value ? 0 : 1};
     }
 
     private static final int PROJECT_BUKKITDEV_ID = 31263;
 
     private void startUpdater() {
         if (Properties.TURN_OFF_UPDATES) {
+            getLogger().info("Auto-updater is disabled. If you want the plugin to automatically download new releases then set 'TURN_OFF_UPDATES' to 'false' in your config.yml!");
             return;
         }
 
         new Updater(this, PROJECT_BUKKITDEV_ID, this.getFile(), Updater.UpdateType.DEFAULT, true);
+    }
+
+    private static final String PROJECT_JENKINS_JOB_URL = "https://ci.minebench.de/job/ChestShop-3/";
+
+    private void startBuildNotificatier() {
+        if (Properties.TURN_OFF_DEV_UPDATE_NOTIFIER) {
+            return;
+        }
+
+        new JenkinsBuildsNotifier(this, PROJECT_JENKINS_JOB_URL);
     }
 
     ///////////////////////////////////////////////////////////////////////////////
@@ -455,10 +520,22 @@ public class ChestShop extends JavaPlugin {
         Bukkit.getPluginManager().callEvent(event);
     }
 
+    public static void sendBungeeMessage(String playerName, Messages.Message message, Map<String, String> replacementMap, String... replacements) {
+        sendBungeeMessage(playerName, message.getComponents(null, true, replacementMap, replacements));
+    }
+
     public static void sendBungeeMessage(String playerName, String message) {
+        sendBungeeMessage(playerName, "Message", message);
+    }
+
+    public static void sendBungeeMessage(String playerName, BaseComponent[] message) {
+        sendBungeeMessage(playerName, "MessageRaw", ComponentSerializer.toString(message));
+    }
+
+    private static void sendBungeeMessage(String playerName, String channel, String message) {
         if (Properties.BUNGEECORD_MESSAGES && !Bukkit.getOnlinePlayers().isEmpty()) {
             ByteArrayDataOutput out = ByteStreams.newDataOutput();
-            out.writeUTF("Message");
+            out.writeUTF(channel);
             out.writeUTF(playerName);
             out.writeUTF(message);
 
